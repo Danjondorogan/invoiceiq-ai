@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual Environment
+venv/
+backend/venv/
+
+# Uploads
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Reports
+backend/reports/*
+!backend/reports/.gitkeep
+
+# Database
+*.db
+
+# VS Code
+.vscode/
+
+# React
+node_modules/
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
