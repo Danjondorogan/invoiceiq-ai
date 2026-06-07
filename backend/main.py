@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from services.verifier import verify_invoice
 from services.fraud_detector import calculate_fraud_risk
 from services.ml_detector import predict_invoice_risk
+from services.invoice_parser import parse_invoice_advanced
 
 import sqlite3
 import pandas as pd
@@ -171,9 +172,20 @@ async def upload_invoice(file: UploadFile = File(...)):
     # Extract Fields
     # -------------------------
 
-    fields = extract_invoice_fields(
+    basic_fields = extract_invoice_fields(
         raw_text
     )
+
+    advanced_fields = parse_invoice_advanced(
+        raw_text
+    )
+
+    fields = basic_fields.copy()
+
+    for key, value in advanced_fields.items():
+
+        if value:
+            fields[key] = value
 
     if fields is None:
 
