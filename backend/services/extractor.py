@@ -3,7 +3,7 @@ import fitz
 import pandas as pd
 import pytesseract
 from PIL import Image
-
+from services.ocr_engine import extract_pdf_hybrid
 
 # =====================================
 # FILE TYPE DETECTION
@@ -40,20 +40,9 @@ def detect_file_type(filename):
 
 def extract_from_pdf(pdf_path):
 
-    text = ""
-
-    doc = fitz.open(pdf_path)
-
-    for page in doc:
-
-        page_text = page.get_text()
-
-        if page_text:
-            text += str(page_text) + "\n"
-
-    doc.close()
-
-    return text
+    return extract_pdf_hybrid(
+        pdf_path
+    )
 
 
 # =====================================
@@ -304,5 +293,5 @@ def extract_invoice_fields(text):
                 data["vendor_name"] = line
 
                 break
-            
+
     return data
