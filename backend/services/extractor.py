@@ -197,6 +197,7 @@ def extract_invoice_fields(text):
 
     amount_patterns = [
 
+        r"Invoice\s*Value[:\s₹]*([\d,]+\.\d{2})",
         r"Grand\s*Total[:\s₹]*([\d,]+\.\d{2})",
         r"Total\s*Amount[:\s₹]*([\d,]+\.\d{2})",
         r"Invoice\s*Total[:\s₹]*([\d,]+\.\d{2})",
@@ -223,7 +224,31 @@ def extract_invoice_fields(text):
             )
 
             break
+# -------------------------
+# Vendor Name (Priority Extraction)
+# -------------------------
 
+    vendor_patterns = [
+
+        r"Sold By\s*:\s*(.+)",
+        r"Regd Office:\s*(.+)",
+        ]
+
+    for pattern in vendor_patterns:
+
+        match = re.search(
+            pattern,
+            text,
+            re.IGNORECASE
+        )
+
+        if match:
+
+            data["vendor_name"] = (
+                match.group(1).strip()
+            )
+
+            break
     # -------------------------
     # Vendor Name
     # -------------------------
@@ -262,20 +287,22 @@ def extract_invoice_fields(text):
         "state code"
     ]
 
-    for line in cleaned_lines[:10]:
+    if not data["vendor_name"]:
 
-        lower_line = line.lower()
+        for line in cleaned_lines[:10]:
 
-        if any(
-            word in lower_line
-            for word in blacklist
-        ):
-            continue
+            lower_line = line.lower()
 
-        if 4 < len(line) < 80:
+            if any(
+                word in lower_line
+                for word in blacklist
+            ):
+                continue
 
-            data["vendor_name"] = line
+            if 4 < len(line) < 80:
 
-            break
+                data["vendor_name"] = line
 
+                break
+            
     return data

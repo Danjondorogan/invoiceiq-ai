@@ -174,6 +174,16 @@ async def upload_invoice(file: UploadFile = File(...)):
         raw_text
     )
 
+    if fields is None:
+
+        fields = {
+            "invoice_number": "",
+            "vendor_name": "",
+            "invoice_date": "",
+            "amount": "",
+            "gst_number": ""
+        }
+
     print("\nFIELDS EXTRACTED:")
     print(fields)
     print()
@@ -241,7 +251,8 @@ async def upload_invoice(file: UploadFile = File(...)):
             uploaded_at
         )
         VALUES(?,?,?,?,?,?,?,?)
-    """, (
+    """,
+      (
         filename,
         fields["invoice_number"],
         fields["vendor_name"],
@@ -336,27 +347,3 @@ def get_stats():
         "average_fraud_score": round(avg_score or 0, 2)
     }
 
-@app.get("/invoice/{invoice_id}")
-def get_invoice(invoice_id: int):
-
-    conn = sqlite3.connect(DATABASE)
-
-    conn.row_factory = sqlite3.Row
-
-    cursor = conn.cursor()
-
-    cursor.execute(
-        "SELECT * FROM invoices WHERE id=?",
-        (invoice_id,)
-    )
-
-    invoice = cursor.fetchone()
-
-    conn.close()
-
-    if not invoice:
-        return {
-            "error": "Invoice not found"
-        }
-
-    return dict(invoice)
