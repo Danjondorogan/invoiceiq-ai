@@ -335,3 +335,28 @@ def get_stats():
         "high_risk": high_risk,
         "average_fraud_score": round(avg_score or 0, 2)
     }
+
+@app.get("/invoice/{invoice_id}")
+def get_invoice(invoice_id: int):
+
+    conn = sqlite3.connect(DATABASE)
+
+    conn.row_factory = sqlite3.Row
+
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT * FROM invoices WHERE id=?",
+        (invoice_id,)
+    )
+
+    invoice = cursor.fetchone()
+
+    conn.close()
+
+    if not invoice:
+        return {
+            "error": "Invoice not found"
+        }
+
+    return dict(invoice)
