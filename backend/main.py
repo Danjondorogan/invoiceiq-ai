@@ -1,13 +1,10 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from services.verifier import verify_invoice
-from services.verifier import verify_invoice
 from services.fraud_detector import calculate_fraud_risk
 
 import sqlite3
 import pandas as pd
-import fitz
-import pytesseract
 
 from services.extractor import (
     detect_file_type,
@@ -17,10 +14,8 @@ from services.extractor import (
     extract_invoice_fields
 )
 
-from PIL import Image
 from datetime import datetime
 import os
-import re
 
 app = FastAPI(title="InvoiceIQ")
 
@@ -95,72 +90,6 @@ def home():
         "status": "running",
         "version": "1.0.0"
     }
-
-
-# =====================================
-# PDF TEXT EXTRACTION
-# =====================================
-
-def extract_pdf_text(pdf_path):
-
-    text = ""
-
-    doc = fitz.open(pdf_path)
-
-    for page in doc:
-
-        page_text = page.get_text("text")
-
-        if isinstance(page_text, str):
-            text += page_text
-
-    doc.close()
-
-    return text
-
-
-# =====================================
-# INVOICE FIELD EXTRACTION
-# =====================================
-
-def extract_invoice_fields(text):
-
-    invoice_number = ""
-    invoice_date = ""
-    amount = 0.0
-
-    invoice_match = re.search(
-        r"(Invoice\s*No\.?\s*[:\-]?\s*)(\S+)",
-        text,
-        re.IGNORECASE
-    )
-
-    if invoice_match:
-        invoice_number = invoice_match.group(2)
-
-    date_match = re.search(
-        r"(\d{2}[/-]\d{2}[/-]\d{4})",
-        text
-    )
-
-    if date_match:
-        invoice_date = date_match.group()
-
-    amount_match = re.search(
-        r"(Total|Grand Total).*?(\d+\.\d+)",
-        text,
-        re.IGNORECASE
-    )
-
-    if amount_match:
-        amount = float(amount_match.group(2))
-
-    return {
-        "invoice_number": invoice_number,
-        "invoice_date": invoice_date,
-        "amount": amount
-    }
-
 
 # =====================================
 # DUPLICATE CHECK
@@ -244,6 +173,10 @@ async def upload_invoice(file: UploadFile = File(...)):
     fields = extract_invoice_fields(
         raw_text
     )
+
+    print("\nFIELDS EXTRACTED:")
+    print(fields)
+    print()
 
     # -------------------------
     # Verification
