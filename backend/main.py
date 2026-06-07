@@ -288,3 +288,50 @@ def dashboard():
     conn.close()
 
     return df.to_dict(orient="records")
+
+@app.get("/stats")
+def get_stats():
+
+    conn = sqlite3.connect(DATABASE)
+
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT COUNT(*) FROM invoices"
+    )
+
+    total = cursor.fetchone()[0]
+
+    cursor.execute(
+        "SELECT COUNT(*) FROM invoices WHERE status='VERIFIED'"
+    )
+
+    verified = cursor.fetchone()[0]
+
+    cursor.execute(
+        "SELECT COUNT(*) FROM invoices WHERE status='SUSPICIOUS'"
+    )
+
+    suspicious = cursor.fetchone()[0]
+
+    cursor.execute(
+        "SELECT COUNT(*) FROM invoices WHERE status='HIGH RISK'"
+    )
+
+    high_risk = cursor.fetchone()[0]
+
+    cursor.execute(
+        "SELECT AVG(fraud_score) FROM invoices"
+    )
+
+    avg_score = cursor.fetchone()[0]
+
+    conn.close()
+
+    return {
+        "total_invoices": total,
+        "verified": verified,
+        "suspicious": suspicious,
+        "high_risk": high_risk,
+        "average_fraud_score": round(avg_score or 0, 2)
+    }
