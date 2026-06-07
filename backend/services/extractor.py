@@ -119,9 +119,13 @@ def extract_invoice_fields(text):
 
         r"Invoice\s*No[:\-\s]*([A-Z0-9\/\-]+)",
         r"Invoice\s*Number[:\-\s]*([A-Z0-9\/\-]+)",
+        r"Invoice\s*#[:\-\s]*([A-Z0-9\/\-]+)",
+        r"Invoice\s*ID[:\-\s]*([A-Z0-9\/\-]+)",
+        r"Tax\s*Invoice\s*No[:\-\s]*([A-Z0-9\/\-]+)",
         r"Inv\s*No[:\-\s]*([A-Z0-9\/\-]+)",
-        r"Bill\s*No[:\-\s]*([A-Z0-9\/\-]+)"
-    ]
+        r"Bill\s*No[:\-\s]*([A-Z0-9\/\-]+)",
+        r"Reference\s*No[:\-\s]*([A-Z0-9\/\-]+)"
+        ]
 
     for pattern in invoice_patterns:
 
@@ -166,7 +170,10 @@ def extract_invoice_fields(text):
         r"\d{2}/\d{2}/\d{4}",
         r"\d{2}-\d{2}-\d{4}",
         r"\d{4}-\d{2}-\d{2}",
-        r"\d{2}\.\d{2}\.\d{4}"
+        r"\d{2}\.\d{2}\.\d{4}",
+
+        r"\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}",
+        r"[A-Za-z]{3,9}\s+\d{1,2},\s+\d{4}"
     ]
 
     for pattern in date_patterns:
@@ -192,9 +199,14 @@ def extract_invoice_fields(text):
 
         r"Grand\s*Total[:\s₹]*([\d,]+\.\d{2})",
         r"Total\s*Amount[:\s₹]*([\d,]+\.\d{2})",
+        r"Invoice\s*Total[:\s₹]*([\d,]+\.\d{2})",
         r"Amount\s*Due[:\s₹]*([\d,]+\.\d{2})",
-        r"Net\s*Amount[:\s₹]*([\d,]+\.\d{2})"
-    ]
+        r"Net\s*Amount[:\s₹]*([\d,]+\.\d{2})",
+        r"Payable\s*Amount[:\s₹]*([\d,]+\.\d{2})",
+        r"Final\s*Amount[:\s₹]*([\d,]+\.\d{2})",
+        r"Total[:\s₹]*([\d,]+\.\d{2})"
+        
+        ]       
 
     for pattern in amount_patterns:
 
@@ -235,11 +247,19 @@ def extract_invoice_fields(text):
         "invoice",
         "tax invoice",
         "gst",
+        "cgst",
+        "sgst",
+        "igst",
         "amount",
         "quantity",
         "description",
         "date",
-        "bill"
+        "bill",
+        "phone",
+        "mobile",
+        "address",
+        "hsn",
+        "state code"
     ]
 
     for line in cleaned_lines[:10]:
@@ -252,7 +272,7 @@ def extract_invoice_fields(text):
         ):
             continue
 
-        if len(line) < 60:
+        if 4 < len(line) < 80:
 
             data["vendor_name"] = line
 
