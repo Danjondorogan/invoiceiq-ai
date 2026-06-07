@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from services.verifier import verify_invoice
 from services.fraud_detector import calculate_fraud_risk
+from services.ml_detector import predict_invoice_risk
 
 import sqlite3
 import pandas as pd
@@ -211,6 +212,13 @@ async def upload_invoice(file: UploadFile = File(...)):
         )
     )
 
+    ml_result = (
+        predict_invoice_risk(
+            fields,
+            historical_invoices
+        )
+    )
+
     # -------------------------
     # Status Calculation
     # -------------------------
@@ -219,6 +227,8 @@ async def upload_invoice(file: UploadFile = File(...)):
         fraud_result["fraud_score"]
         +
         verification["risk_score"]
+        +
+        ml_result["ml_score"]
     )
 
     status = "VERIFIED"
@@ -275,9 +285,15 @@ async def upload_invoice(file: UploadFile = File(...)):
         "file_type": file_type,
         "status": status,
         "fraud_score": fraud_score,
+
         "invoice_data": fields,
+
         "verification": verification,
+
         "fraud_analysis": fraud_result,
+
+        "ml_analysis": ml_result,
+
         "preview": raw_text[:1000]
     }
 
