@@ -1,13 +1,17 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+
+from services.vendor_validator import validate_vendor
 from services.verifier import verify_invoice
 from services.fraud_detector import calculate_fraud_risk
 from services.ml_detector import predict_invoice_risk
 from services.invoice_parser import parse_invoice_advanced
 
-import sqlite3
-import pandas as pd
-
+from services.analytics import (
+    vendor_analytics,
+    monthly_analytics,
+    risk_distribution
+)
 from services.extractor import (
     detect_file_type,
     extract_from_pdf,
@@ -16,8 +20,11 @@ from services.extractor import (
     extract_invoice_fields
 )
 
-from datetime import datetime
+import sqlite3
+import pandas as pd
 import os
+
+from datetime import datetime
 
 app = FastAPI(title="InvoiceIQ")
 
@@ -42,7 +49,10 @@ app.add_middleware(
 UPLOAD_FOLDER = "uploads"
 DATABASE = "database.db"
 
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(
+    UPLOAD_FOLDER,
+    exist_ok=True
+)
 
 
 # =====================================
@@ -73,6 +83,17 @@ def init_db():
     )
     """)
 
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS vendors (
+
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+        vendor_name TEXT UNIQUE,
+        gst_number TEXT,
+        status TEXT
+    )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -81,7 +102,7 @@ init_db()
 
 
 # =====================================
-# HOME ROUTE
+# HOME
 # =====================================
 
 @app.get("/")
@@ -93,26 +114,10 @@ def home():
         "version": "1.0.0"
     }
 
+
 # =====================================
-# DUPLICATE CHECK
+# HISTORY
 # =====================================
-
-def check_duplicate(invoice_number):
-
-    conn = sqlite3.connect(DATABASE)
-
-    cursor = conn.cursor()
-
-    cursor.execute(
-        "SELECT * FROM invoices WHERE invoice_number=?",
-        (invoice_number,)
-    )
-
-    result = cursor.fetchone()
-
-    conn.close()
-
-    return result is not None
 
 def get_historical_invoices():
 
@@ -134,8 +139,9 @@ def get_historical_invoices():
 
     return rows
 
+
 # =====================================
-# UPLOAD INVOICE
+# UPLOAD
 # =====================================
 
 @app.post("/upload")
@@ -152,24 +158,35 @@ async def upload_invoice(file: UploadFile = File(...)):
         f.write(await file.read())
 
     # -------------------------
-    # Detect File Type
+    # File Type Detection
     # -------------------------
 
-    file_type = detect_file_type(filename)
+    file_type = detect_file_type(
+        filename
+    )
 
     raw_text = ""
 
     if file_type == "pdf":
-        raw_text = extract_from_pdf(filepath)
+
+        raw_text = extract_from_pdf(
+            filepath
+        )
 
     elif file_type == "excel":
-        raw_text = extract_from_excel(filepath)
+
+        raw_text = extract_from_excel(
+            filepath
+        )
 
     elif file_type == "image":
-        raw_text = extract_from_image(filepath)
+
+        raw_text = extract_from_image(
+            filepath
+        )
 
     # -------------------------
-    # Extract Fields
+    # Extraction
     # -------------------------
 
     basic_fields = extract_invoice_fields(
@@ -185,6 +202,7 @@ async def upload_invoice(file: UploadFile = File(...)):
     for key, value in advanced_fields.items():
 
         if value:
+
             fields[key] = value
 
     if fields is None:
@@ -207,6 +225,11 @@ async def upload_invoice(file: UploadFile = File(...)):
 
     verification = verify_invoice(
         fields
+    )
+
+    vendor_check = validate_vendor(
+        fields["vendor_name"],
+        fields["gst_number"]
     )
 
     # -------------------------
@@ -232,7 +255,7 @@ async def upload_invoice(file: UploadFile = File(...)):
     )
 
     # -------------------------
-    # Status Calculation
+    # Final Score
     # -------------------------
 
     fraud_score = (
@@ -243,6 +266,13 @@ async def upload_invoice(file: UploadFile = File(...)):
         ml_result["ml_score"]
     )
 
+    if (
+        not vendor_check["valid"]
+        and
+        vendor_check["reason"] != "New vendor"
+    ):
+        fraud_score += 20
+
     status = "VERIFIED"
 
     if fraud_score >= 40:
@@ -252,7 +282,7 @@ async def upload_invoice(file: UploadFile = File(...)):
         status = "HIGH RISK"
 
     # -------------------------
-    # Save Database
+    # Save
     # -------------------------
 
     conn = sqlite3.connect(
@@ -274,7 +304,7 @@ async def upload_invoice(file: UploadFile = File(...)):
         )
         VALUES(?,?,?,?,?,?,?,?)
     """,
-      (
+    (
         filename,
         fields["invoice_number"],
         fields["vendor_name"],
@@ -285,6 +315,20 @@ async def upload_invoice(file: UploadFile = File(...)):
         str(datetime.now())
     ))
 
+    cursor.execute("""
+    INSERT OR IGNORE INTO vendors(
+        vendor_name,
+        gst_number,
+        status
+    )
+    VALUES(?,?,?)
+    """,
+    (
+        fields["vendor_name"],
+        fields["gst_number"],
+        "ACTIVE"
+    ))
+
     conn.commit()
     conn.close()
 
@@ -293,14 +337,20 @@ async def upload_invoice(file: UploadFile = File(...)):
     # -------------------------
 
     return {
+
         "filename": filename,
+
         "file_type": file_type,
+
         "status": status,
+
         "fraud_score": fraud_score,
 
         "invoice_data": fields,
 
         "verification": verification,
+
+        "vendor_validation": vendor_check,
 
         "fraud_analysis": fraud_result,
 
@@ -317,7 +367,9 @@ async def upload_invoice(file: UploadFile = File(...)):
 @app.get("/dashboard")
 def dashboard():
 
-    conn = sqlite3.connect(DATABASE)
+    conn = sqlite3.connect(
+        DATABASE
+    )
 
     df = pd.read_sql_query(
         "SELECT * FROM invoices",
@@ -326,12 +378,41 @@ def dashboard():
 
     conn.close()
 
-    return df.to_dict(orient="records")
+    return df.to_dict(
+        orient="records"
+    )
+
+
+# =====================================
+# STATS
+# =====================================
+# =====================================
+# ANALYTICS
+# =====================================
+
+@app.get("/analytics/vendors")
+def analytics_vendors():
+
+    return vendor_analytics()
+
+
+@app.get("/analytics/monthly")
+def analytics_monthly():
+
+    return monthly_analytics()
+
+
+@app.get("/analytics/risk-distribution")
+def analytics_risk_distribution():
+
+    return risk_distribution()
 
 @app.get("/stats")
 def get_stats():
 
-    conn = sqlite3.connect(DATABASE)
+    conn = sqlite3.connect(
+        DATABASE
+    )
 
     cursor = conn.cursor()
 
@@ -368,10 +449,17 @@ def get_stats():
     conn.close()
 
     return {
-        "total_invoices": total,
-        "verified": verified,
-        "suspicious": suspicious,
-        "high_risk": high_risk,
-        "average_fraud_score": round(avg_score or 0, 2)
-    }
 
+        "total_invoices": total,
+
+        "verified": verified,
+
+        "suspicious": suspicious,
+
+        "high_risk": high_risk,
+
+        "average_fraud_score": round(
+            avg_score or 0,
+            2
+        )
+    }

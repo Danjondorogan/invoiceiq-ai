@@ -1,4 +1,17 @@
+import joblib
 from collections import Counter
+
+MODEL_PATH = "models/fraud_model.pkl"
+
+try:
+
+    model = joblib.load(
+        MODEL_PATH
+    )
+
+except Exception:
+
+    model = None
 
 
 def generate_ml_features(
@@ -10,84 +23,118 @@ def generate_ml_features(
         invoice_data.get(
             "invoice_number",
             ""
-        )
-    )
+        ) or ""
+    ).strip()
 
     vendor_name = str(
         invoice_data.get(
             "vendor_name",
             ""
-        )
-    )
-
-    amount = str(
-        invoice_data.get(
-            "amount",
-            ""
-        )
-    )
+        ) or ""
+    ).strip()
 
     gst_number = str(
         invoice_data.get(
             "gst_number",
             ""
-        )
-    )
+        ) or ""
+    ).strip()
 
-    duplicate_flag = 0
-    vendor_frequency = 0
-    amount_frequency = 0
+    amount = str(
+        invoice_data.get(
+            "amount",
+            ""
+        ) or ""
+    ).strip()
 
     invoice_numbers = []
-    vendors = []
+    vendor_names = []
     amounts = []
 
     for row in historical_invoices:
 
         invoice_numbers.append(
-            str(row[0])
+            str(row[0] or "").strip()
         )
 
-        vendors.append(
-            str(row[1])
+        vendor_names.append(
+            str(row[1] or "").strip()
         )
 
         amounts.append(
-            str(row[2])
+            str(row[2] or "").strip()
         )
 
-    if invoice_number in invoice_numbers:
-        duplicate_flag = 1
-
-    vendor_counter = Counter(
-        vendors
-    )
-
-    amount_counter = Counter(
-        amounts
+    duplicate_flag = int(
+        invoice_number != ""
+        and
+        invoice_number in invoice_numbers
     )
 
     vendor_frequency = (
-        vendor_counter.get(
+        Counter(vendor_names).get(
             vendor_name,
             0
         )
     )
 
     amount_frequency = (
-        amount_counter.get(
+        Counter(amounts).get(
             amount,
             0
         )
     )
 
-    return {
-        "duplicate_flag": duplicate_flag,
-        "vendor_frequency": vendor_frequency,
-        "amount_frequency": amount_frequency,
-        "has_gst": int(bool(gst_number)),
-        "has_invoice_number": int(bool(invoice_number))
+    has_gst = int(
+        gst_number != ""
+    )
+
+    has_invoice_number = int(
+        invoice_number != ""
+    )
+
+    try:
+
+        amount_value = float(
+            amount.replace(",", "")
+        )
+
+    except Exception:
+
+        amount_value = 0.0
+
+    features = [
+
+        has_invoice_number,
+        int(vendor_name != ""),
+        duplicate_flag,
+        vendor_frequency,
+        amount_frequency,
+        amount_value
+    ]
+
+    feature_details = {
+
+        "duplicate_flag":
+            duplicate_flag,
+
+        "vendor_frequency":
+            vendor_frequency,
+
+        "amount_frequency":
+            amount_frequency,
+
+        "has_gst":
+            has_gst,
+
+        "has_invoice_number":
+            has_invoice_number,
+
+        "amount":
+            amount_value
     }
+
+    return features, feature_details
 
 
 def predict_invoice_risk(
@@ -95,42 +142,74 @@ def predict_invoice_risk(
     historical_invoices
 ):
 
-    features = generate_ml_features(
-        invoice_data,
-        historical_invoices
-    )
+    if model is None:
 
-    score = 0
+        return {
 
-    if features["duplicate_flag"]:
-        score += 10
+            "ml_score": 0,
 
-    if features["vendor_frequency"] > 10:
-        score += 15
+            "prediction":
+                "MODEL_NOT_FOUND",
 
-    if features["amount_frequency"] > 5:
-        score += 10
+            "probability": 0,
 
-    if not features["has_gst"]:
-        score += 15
+            "features": {}
+        }
 
-    if not features["has_invoice_number"]:
-        score += 20
+    try:
 
-    if score >= 70:
+        features, feature_details = (
+            generate_ml_features(
+                invoice_data,
+                historical_invoices
+            )
+        )
 
-        prediction = "HIGH_RISK"
+        prediction = model.predict(
+            [features]
+        )[0]
 
-    elif score >= 40:
+        probability = model.predict_proba(
+            [features]
+        )[0][1]
 
-        prediction = "MEDIUM_RISK"
+        ml_score = int(
+            probability * 100
+        )
 
-    else:
+        return {
 
-        prediction = "LOW_RISK"
+            "ml_score":
+                ml_score,
 
-    return {
-        "ml_score": score,
-        "prediction": prediction,
-        "features": features
-    }
+            "prediction":
+                "HIGH_RISK"
+                if prediction == 1
+                else "LOW_RISK",
+
+            "probability":
+                round(
+                    float(probability),
+                    3
+                ),
+
+            "features":
+                feature_details
+        }
+
+    except Exception as e:
+
+        return {
+
+            "ml_score": 0,
+
+            "prediction":
+                "ML_ERROR",
+
+            "probability": 0,
+
+            "error":
+                str(e),
+
+            "features": {}
+        }
